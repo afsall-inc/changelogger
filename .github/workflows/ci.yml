@@ -9,6 +9,9 @@ on:
       toolchain:
         default: "nightly-2026-02-18"
 
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -26,5 +29,16 @@ jobs:
         run: cargo clippy --workspace -- -D warnings
       - name: Run tests
         run: cargo test --workspace
+      - name: Validate PRDoc
+        if: github.event_name == 'pull_request'
+        env:
+          CI: "true"
+        run: |
+          PRDOC="prdoc/pr_${{ github.event.pull_request.number }}.prdoc"
+          if [ -f "$PRDOC" ]; then
+            cargo run --package changelogger-cli -- prdoc validate "$PRDOC"
+          else
+            echo "No prdoc found at $PRDOC (skipping validation)"
+          fi
       - name: Build
         run: cargo build --workspace

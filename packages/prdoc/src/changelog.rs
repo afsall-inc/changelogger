@@ -365,7 +365,7 @@ pub fn load_prdocs_from_dir_recursive(dir: &Path) -> Vec<PrDoc> {
     prdocs
 }
 
-fn walk_dir(dir: &Path) -> std::io::Result<Vec<std::path::PathBuf>> {
+pub fn walk_dir(dir: &Path) -> std::io::Result<Vec<std::path::PathBuf>> {
     let mut files = Vec::new();
     if dir.is_dir() {
         for entry in std::fs::read_dir(dir)? {

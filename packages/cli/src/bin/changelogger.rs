@@ -204,26 +204,43 @@ fn cmd_validate(path: &str, branch: Option<&str>) -> Result<String, String> {
     let path = PathBuf::from(path);
 
     if path.is_dir() {
-        let prdocs = changelogger_prdoc::load_prdocs_from_dir_recursive(&path);
         let mut all_issues = Vec::new();
-        for prdoc in &prdocs {
+        let mut count = 0usize;
+        let entries = changelogger_prdoc::walk_dir(&path).unwrap_or_default();
+        for entry in entries {
+            if entry.extension().and_then(|e| e.to_str()) != Some("prdoc") {
+                continue;
+            }
+            count += 1;
+            let prdoc = match changelogger_prdoc::load_prdoc(&entry) {
+                Ok(p) => p,
+                Err(e) => {
+                    all_issues.push(format!("{}: {}", entry.display(), e));
+                    continue;
+                }
+            };
             let issues = if let Some(branch_name) = branch {
                 changelogger_prdoc::validate_prdoc_for_branch(
-                    prdoc,
+                    &prdoc,
                     branch_name,
                 )
             } else {
-                changelogger_prdoc::validate_prdoc(prdoc)
+                changelogger_prdoc::validate_prdoc(&prdoc)
             };
             if !issues.is_empty() {
                 all_issues.push(format!(
-                    "Issues in prdoc:\n{}",
-                    issues.join("\n  - ")
+                    "{}:\n{}",
+                    entry.display(),
+                    issues
+                        .iter()
+                        .map(|i| format!("  - {i}"))
+                        .collect::<Vec<_>>()
+                        .join("\n")
                 ));
             }
         }
         if all_issues.is_empty() {
-            Ok(format!("Validated {} prdoc file(s).", prdocs.len()))
+            Ok(format!("Validated {count} prdoc file(s)."))
         } else {
             Err(all_issues.join("\n"))
         }
