@@ -27,6 +27,7 @@ impl WorkspaceInfo {
         for pkg in &metadata.workspace_packages() {
             let pkg_path =
                 pkg.manifest_path.parent().unwrap_or(&pkg.manifest_path);
+            let pkg_path = pkg_path.as_std_path();
             let is_publish =
                 pkg.publish.as_ref().map(|p| !p.is_empty()).unwrap_or(true);
 
@@ -36,7 +37,12 @@ impl WorkspaceInfo {
                 publish: is_publish,
             };
 
-            let path_str = pkg_path.as_str().to_string();
+            let path_str = pkg_path
+                .strip_prefix(root)
+                .unwrap_or(pkg_path)
+                .to_string_lossy()
+                .trim_start_matches('/')
+                .to_string();
             crate_by_path.insert(path_str, pkg.name.clone());
             crates.push(crate_info);
         }

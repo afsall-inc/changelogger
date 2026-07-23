@@ -18,7 +18,9 @@ pub fn generate_prdoc(opts: &GenerateOptions) -> Result<PrDoc, String> {
     let modified_crates =
         extract_modified_crates(&diff, opts.workspace.as_ref())?;
 
-    let description = pr_info.body.unwrap_or_else(|| "...".to_string());
+    let description = pr_info.body.filter(|b| !b.is_empty()).unwrap_or_else(|| {
+        format!("Changes for PR #{}", opts.pr_number)
+    });
 
     let doc = vec![DocSection {
         audience: opts.audience.clone(),
