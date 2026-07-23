@@ -11,7 +11,7 @@ cargo clippy --workspace -- -D warnings
 
 ## Data Files
 
-- `.prdoc.toml` — project configuration
+- `changelogger.toml` — project configuration
 - `prdoc/` — PR documentation files
 - `templates/` — Tera templates for changelog rendering
 

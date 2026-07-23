@@ -165,7 +165,7 @@ fn cmd_init() -> Result<String, String> {
     let prdoc_dir = root.join("prdoc");
     std::fs::create_dir_all(&prdoc_dir).map_err(|e| format!("{e}"))?;
 
-    let config_path = root.join(".prdoc.toml");
+    let config_path = root.join("changelogger.toml");
     if !config_path.exists() {
         let config = r#"version = 1
 schema = "prdoc/schema_user.json"

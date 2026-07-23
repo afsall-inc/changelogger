@@ -66,7 +66,7 @@ pub struct GenerateSection {
 }
 
 pub fn load_config(root: &Path) -> PrdocConfig {
-    let config_path = root.join(".prdoc.toml");
+    let config_path = root.join("changelogger.toml");
     if !config_path.exists() {
         return PrdocConfig::default();
     }
@@ -83,7 +83,7 @@ pub fn find_project_root() -> Option<PathBuf> {
     let mut current = std::env::current_dir().ok()?;
     loop {
         if current.join("Cargo.toml").exists()
-            || current.join(".prdoc.toml").exists()
+            || current.join("changelogger.toml").exists()
         {
             return Some(current);
         }
@@ -109,7 +109,7 @@ mod tests {
     #[test]
     fn load_custom_config() {
         let dir = tempfile::tempdir().unwrap();
-        let config_path = dir.path().join(".prdoc.toml");
+        let config_path = dir.path().join("changelogger.toml");
         fs::write(
             &config_path,
             r#"
