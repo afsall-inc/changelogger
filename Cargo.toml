@@ -9,8 +9,8 @@ members = [
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
-authors = ["Afsall Labs"]
-repository = "https://github.com/anomalyco/changelogger"
+authors = ["Afsall Inc."]
+repository = "https://github.com/afsall-inc/changelogger"
 
 [workspace.dependencies]
 serde = { version = "1.0", features = ["derive"] }
