@@ -1,0 +1,44 @@
+name: "Changelogger — PRDoc & Validate"
+description: "Auto-generate and validate prdoc files for pull requests"
+author: "Afsall Labs"
+
+inputs:
+  command:
+    description: "Command: generate+validate (default), generate, validate"
+    default: "generate+validate"
+  pr:
+    description: "PR number"
+    default: "${{ github.event.pull_request.number }}"
+  toolchain:
+    description: "Rust toolchain"
+    default: "nightly-2026-02-18"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@v1
+      with:
+        toolchain: ${{ inputs.toolchain }}
+    - name: Install changelogger
+      shell: bash
+      run: cargo install changelogger-cli
+    - name: Generate PRDoc
+      if: contains(inputs.command, 'generate')
+      shell: bash
+      run: |
+        changelogger prdoc generate --pr ${{ inputs.pr }} --force
+    - name: Validate PRDoc
+      if: contains(inputs.command, 'validate')
+      shell: bash
+      run: |
+        PRDOC_PATH="prdoc/pr_${{ inputs.pr }}.prdoc"
+        if [ -f "$PRDOC_PATH" ]; then
+          changelogger prdoc validate "$PRDOC_PATH"
+        else
+          echo "No prdoc found — skipping validation"
+        fi

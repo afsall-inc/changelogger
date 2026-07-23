@@ -1,0 +1,17 @@
+[package]
+name = "changelogger-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "CLI tool for changelogger — generate prdocs and changelogs."
+
+[[bin]]
+name = "changelogger"
+path = "src/bin/changelogger.rs"
+
+[dependencies]
+clap = { workspace = true }
+changelogger-prdoc = { path = "../prdoc" }
+serde_json.workspace = true

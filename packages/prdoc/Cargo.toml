@@ -1,0 +1,26 @@
+[package]
+name = "changelogger-prdoc"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Structured PR documentation, auto-generation, changelog, and SemVer bumping for Rust projects."
+
+[features]
+default = []
+
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+serde_yaml.workspace = true
+thiserror.workspace = true
+chrono = { workspace = true }
+regex.workspace = true
+toml.workspace = true
+cargo_metadata.workspace = true
+tera.workspace = true
+once_cell.workspace = true
+
+[dev-dependencies]
+tempfile = "3.10"
