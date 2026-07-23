@@ -1,0 +1,44 @@
+name: PRDoc
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@v1
+      with:
+        toolchain: nightly-2026-02-18
+
+    - name: Rust Cache
+      uses: Swatinem/rust-cache@v2
+
+    - name: Build CLI
+      run: cargo build --package changelogger-cli
+
+    - name: Validate PRDoc
+      env:
+        CI: "true"
+      run: |
+        PRDOC="prdoc/pr_${{ github.event.pull_request.number }}.prdoc"
+        if [ -f "$PRDOC" ]; then
+          cargo run --package changelogger-cli -- prdoc validate "$PRDOC"
+        else
+          echo "PRDoc not found at $PRDOC"
+          echo "Create one with: cargo run -- prdoc generate --pr ${{ github.event.pull_request.number }} --bump <level> --audience <audience>"
+          exit 1
+        fi
+
+    - name: Validate Backport Rules
+      if: startsWith(github.base_ref, 'stable') || startsWith(github.base_ref, 'release')
+      run: |
+        PRDOC="prdoc/pr_${{ github.event.pull_request.number }}.prdoc"
+        cargo run --package changelogger-cli -- prdoc validate --branch "${{ github.base_ref }}" "$PRDOC"
