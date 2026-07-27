@@ -12,20 +12,24 @@ cargo clippy --workspace -- -D warnings
 ## Data Files
 
 - `changelogger.toml` — project configuration
-- `prdoc/` — PR documentation files
+- `prdoc/` — PR documentation files (`.prdoc`)
 - `templates/` — Tera templates for changelog rendering
+- `packages/cli/src/schema_user.json` — embedded JSON Schema for `init` command
 
 ## Architecture
 
-| Package | Role |
-|---------|------|
-| `prdoc` | Core library: types, parse, validate, analyze, generate, changelog |
-| `cli` | Binary entrypoint (`changelogger` command) |
+| Package | Crate | Role |
+|---------|-------|------|
+| `prdoc` | `changelogger-prdoc` | Core library: types, parse, validate, analyze, generate, changelog |
+| `cli` | `changelogger-cli` | Binary entrypoint (`changelogger` command) |
+
+`changelogger-cli` depends on `changelogger-prdoc` via path during development, and via crates.io for published releases.
 
 ## Toolchain
 
 - **Rust**: `nightly-2026-02-18` (pinned in `rust-toolchain.toml`)
 - **Cargo**: edition 2024, resolver "2"
+- **License**: Apache-2.0 OR MIT
 
 ## Developer Commands
 
@@ -52,6 +56,7 @@ cargo clippy -p changelogger-prdoc -- -D warnings
 ## Testing
 
 - `cargo test --workspace` for unit/integration tests
+- 16 tests in `changelogger-prdoc` covering types, config, analyzer, changelog, generator, workspace
 - All tests must be hermetic, deterministic, and isolated
 
 ## PRDoc
@@ -59,8 +64,25 @@ cargo clippy -p changelogger-prdoc -- -D warnings
 Structured PR docs at `prdoc/`. Commands:
 
 ```bash
-cargo run -- prdoc validate
-cargo run -- prdoc show prdoc/pr_1.prdoc
-cargo run -- prdoc generate --pr 42
-cargo run -- changelog generate --from v0.1.0
+cargo run --package changelogger-cli -- prdoc validate
+cargo run --package changelogger-cli -- prdoc show prdoc/pr_1.prdoc
+cargo run --package changelogger-cli -- prdoc generate --pr 42
+cargo run --package changelogger-cli -- changelog generate --from v0.1.0
 ```
+
+## Publishing
+
+```bash
+# Switch cli to crates.io dependency first
+cargo publish -p changelogger-prdoc
+cargo publish -p changelogger-cli
+# Then restore path dependency for local dev
+```
+
+## CI/CD
+
+| Workflow | File | Trigger | Behavior |
+|----------|------|---------|----------|
+| CI | `.github/workflows/ci.yml` | push/PR to main | fmt → clippy → test → build |
+| PRDoc | `.github/workflows/prdoc.yml` | PR opened/sync | auto-generate prdoc, validate, commit back |
+| Command PRDoc | `.github/workflows/command-prdoc.yml` | workflow_dispatch | manual prdoc generation with bump/audience inputs |
