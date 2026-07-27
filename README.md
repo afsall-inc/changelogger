@@ -2,7 +2,7 @@
 
 **changelogger** is a Rust tool for generating structured PR documentation (prdocs) and changelogs. It's designed for CI/CD — every PR gets a machine-readable prdoc file that describes what changed, which crates were affected, and what SemVer bump each crate needs. At release time, prdocs are aggregated into a `CHANGELOG.md`.
 
-Inspired by the [Polkadot SDK](https://github.com/paritytech/polkadot-sdk) prdoc system. Used by [MontRS](https://github.com/afsall-labs/montrs) and [Setheum](https://github.com/setheum/setheum).
+Inspired by the [Polkadot SDK](https://github.com/paritytech/polkadot-sdk) prdoc system. Used by [MontRS](https://github.com/afsall-inc/montrs) and [Setheum](https://github.com/setheum/setheum).
 
 ## Why PRDoc?
 
