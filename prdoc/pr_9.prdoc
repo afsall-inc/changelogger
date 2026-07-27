@@ -1,0 +1,14 @@
+---
+title: bump to 0.1.2
+author: balqaasem
+pr: 9
+
+doc:
+  - audience: Developer
+    description: |
+      Changes for PR #9
+
+crates:
+  - name: changelogger-prdoc
+    bump: minor
+---
