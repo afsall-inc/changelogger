@@ -1,0 +1,7 @@
+target/
+.git/
+.gitignore
+*.md
+docs/
+prdoc/
+Cargo.lock

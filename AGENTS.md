@@ -84,5 +84,7 @@ cargo publish -p changelogger-cli
 | Workflow | File | Trigger | Behavior |
 |----------|------|---------|----------|
 | CI | `.github/workflows/ci.yml` | push/PR to main | fmt → clippy → test → build |
+| CD | `.github/workflows/cd.yml` | push to main (version bump) | build + push Docker image to ghcr.io |
 | PRDoc | `.github/workflows/prdoc.yml` | PR opened/sync | auto-generate prdoc, validate, commit back |
 | Command PRDoc | `.github/workflows/command-prdoc.yml` | workflow_dispatch | manual prdoc generation with bump/audience inputs |
+| Release | `.github/workflows/release.yml` | tag push `v*` | GitHub Release + Docker image push to ghcr.io |

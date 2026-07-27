@@ -160,3 +160,14 @@ Categories are inferred from bump levels: `major` → Removed, `minor` → Added
 ## License
 
 Licensed under either of [Apache License, Version 2.0](LICENSE-APACHE) or [MIT License](LICENSE-MIT), at your option.
+
+## Docker
+
+Pre-built images are available on GitHub Container Registry:
+
+```bash
+docker pull ghcr.io/afsall-inc/changelogger:latest
+docker run ghcr.io/afsall-inc/changelogger --help
+```
+
+Images are published automatically on version bumps (via `cd.yml`) and on tag push `v*` (via `release.yml`).
