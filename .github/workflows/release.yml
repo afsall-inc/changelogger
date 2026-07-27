@@ -28,10 +28,13 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${{ github.ref_name }}"
-          VERSION="${TAG#v}"
-          gh release create "$TAG" \
-            --title "changelogger $TAG" \
-            --generate-notes
+          if gh release view "$TAG" &>/dev/null; then
+            echo "Release $TAG already exists — skipping"
+          else
+            gh release create "$TAG" \
+              --title "changelogger $TAG" \
+              --generate-notes
+          fi
 
   container:
     runs-on: ubuntu-latest
