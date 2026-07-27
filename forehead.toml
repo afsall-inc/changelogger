@@ -1,7 +1,7 @@
 [project]
 name = "changelogger"
 default_license = "Apache-2.0 OR MIT"
-default_author = "Afsall Labs"
+default_author = "Afsall Inc"
 default_year = 2026
 repository = "https://github.com/afsall-inc/changelogger"
 description = "Auto-generate CHANGELOGs and prdocs"
@@ -15,4 +15,4 @@ template = "mit-apache"
 
 [header]
 indicators = []
-greetings = ""
+greetings = "بِسْمِ اللَّهِ الرَّحْمَنِ الرَّحِيم"

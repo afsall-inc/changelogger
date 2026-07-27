@@ -1,6 +1,7 @@
+# بِسْمِ اللَّهِ الرَّحْمَنِ الرَّحِيم
 # This file is part of changelogger.
 #
-# Copyright (C) 2026-Present Afsall Labs.
+# Copyright (C) 2026-Present Afsall Inc.
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -36,7 +37,7 @@
 
 name: "Changelogger — PRDoc & Validate"
 description: "Auto-generate and validate prdoc files for pull requests"
-author: "Afsall Labs"
+author: "Afsall Inc"
 
 inputs:
   command:
