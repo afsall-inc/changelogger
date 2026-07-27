@@ -208,6 +208,19 @@ fn extract_modified_crates(
         }
     }
 
+    // If no specific crate matched but the root Cargo.toml changed (e.g. version bump),
+    // include all publishable workspace crates.
+    if crates.is_empty() {
+        let root_changed = changed_paths
+            .iter()
+            .any(|p| p == "Cargo.toml" || p.starts_with("Cargo.toml"));
+        if root_changed {
+            for name in &workspace_packages {
+                crates.insert(name.to_string());
+            }
+        }
+    }
+
     let mut sorted: Vec<String> = crates.into_iter().collect();
     sorted.sort();
     Ok(sorted)
