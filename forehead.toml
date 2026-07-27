@@ -1,0 +1,18 @@
+[project]
+name = "changelogger"
+default_license = "Apache-2.0 OR MIT"
+default_author = "Afsall Labs"
+default_year = 2026
+repository = "https://github.com/afsall-inc/changelogger"
+description = "Auto-generate CHANGELOGs and prdocs"
+
+[templates]
+mit-apache = "docs/LICENSES/headers/HEADER-MIT-APACHE"
+
+[[mapping]]
+paths = ["."]
+template = "mit-apache"
+
+[header]
+indicators = []
+greetings = ""

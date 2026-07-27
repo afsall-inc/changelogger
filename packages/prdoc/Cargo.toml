@@ -2,7 +2,7 @@
 name = "changelogger-prdoc"
 version.workspace = true
 edition.workspace = true
-license.workspace = true
+license = "Apache-2.0 OR MIT"
 authors.workspace = true
 repository.workspace = true
 description = "Structured PR documentation, auto-generation, changelog, and SemVer bumping for Rust projects."
