@@ -44,4 +44,4 @@ jobs:
 
 ## License
 
-MIT
+Licensed under [Apache-2.0 OR MIT](https://github.com/afsall-inc/changelogger) at your option.

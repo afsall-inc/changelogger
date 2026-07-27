@@ -159,4 +159,4 @@ Categories are inferred from bump levels: `major` → Removed, `minor` → Added
 
 ## License
 
-MIT
+Licensed under either of [Apache License, Version 2.0](LICENSE-APACHE) or [MIT License](LICENSE-MIT), at your option.
