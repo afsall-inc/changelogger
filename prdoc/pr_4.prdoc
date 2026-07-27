@@ -1,0 +1,16 @@
+---
+title: "init: scaffold changelogger workspace with prdoc library and CLI"
+author: balqaasem
+pr: 4
+
+doc:
+  - audience: Developer
+    description: |
+      Changes for PR #4
+
+crates:
+  - name: changelogger-cli
+    bump: minor
+  - name: changelogger-prdoc
+    bump: minor
+---

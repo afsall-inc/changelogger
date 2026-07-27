@@ -1,0 +1,85 @@
+name: Command PRDoc
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr:
+        type: number
+        description: Number of the Pull Request
+        required: true
+      bump:
+        type: choice
+        description: Default bump level for all crates
+        default: "minor"
+        required: true
+        options:
+          - "minor"
+          - "patch"
+          - "major"
+          - "none"
+      audience:
+        type: choice
+        description: Audience of the PRDoc
+        default: "developer"
+        required: true
+        options:
+          - "developer"
+          - "user"
+          - "operator"
+      overwrite:
+        type: boolean
+        description: Overwrite existing PRDoc
+        default: false
+        required: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  cmd-prdoc:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Get PR branch
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          BRANCH=$(gh pr view "${{ inputs.pr }}" --json headRefName -q '.headRefName')
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ steps.pr.outputs.branch }}
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: nightly-2026-02-18
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build CLI
+        run: cargo build --package changelogger-cli
+
+      - name: Generate PRDoc
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          FLAGS=""
+          if [ "${{ inputs.overwrite }}" = "true" ]; then
+            FLAGS="--force"
+          fi
+          cargo run --package changelogger-cli -- prdoc generate \
+            --pr "${{ inputs.pr }}" \
+            --bump "${{ inputs.bump }}" \
+            --audience "${{ inputs.audience }}" \
+            $FLAGS
+
+      - name: Commit PRDoc
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "Add prdoc for PR #${{ inputs.pr }} (auto-generated)"
+          file_pattern: "prdoc/*.prdoc"

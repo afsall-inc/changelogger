@@ -1,0 +1,15 @@
+[tools]
+rust = "1.84"
+
+[env]
+RUST_BACKTRACE = "1"
+
+[tasks]
+build = "cargo build --workspace"
+test = "cargo test --workspace"
+fmt = "cargo fmt --all"
+clippy = "cargo clippy --workspace -- -D warnings"
+
+[tasks.ci]
+description = "Run all CI checks"
+depends = ["fmt", "clippy", "test"]
