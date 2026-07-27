@@ -13,5 +13,5 @@ path = "src/bin/changelogger.rs"
 
 [dependencies]
 clap = { workspace = true }
-changelogger-prdoc = { path = "../prdoc" }
+changelogger-prdoc = "0.1"
 serde_json.workspace = true

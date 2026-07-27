@@ -1,0 +1,16 @@
+---
+title: Publish cli
+author: balqaasem
+pr: 7
+
+doc:
+  - audience: Developer
+    description: |
+      Changes for PR #7
+
+crates:
+  - name: changelogger-cli
+    bump: minor
+  - name: changelogger-prdoc
+    bump: minor
+---

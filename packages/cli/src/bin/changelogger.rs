@@ -183,8 +183,7 @@ operator = "Operator"
 
     let schema_path = prdoc_dir.join("schema_user.json");
     if !schema_path.exists() {
-        let schema = include_str!("../../../../prdoc/schema_user.json");
-        std::fs::write(&schema_path, schema).map_err(|e| format!("{e}"))?;
+        std::fs::write(&schema_path, include_str!("../schema_user.json")).map_err(|e| format!("{e}"))?;
     }
 
     Ok(format!("Initialized prdoc in {}", prdoc_dir.display()))
