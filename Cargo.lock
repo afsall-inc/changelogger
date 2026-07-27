@@ -150,7 +150,7 @@ checksum = "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801"
 name = "changelogger-cli"
 version = "0.1.1"
 dependencies = [
- "changelogger-prdoc",
+ "changelogger-prdoc 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "clap",
  "serde_json",
 ]
@@ -167,6 +167,24 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "tempfile",
+ "tera",
+ "thiserror 2.0.19",
+ "toml",
+]
+
+[[package]]
+name = "changelogger-prdoc"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "650df6efc75e0c098605fcbf91153b4a32cdb37ce43f9795f197197414e88180"
+dependencies = [
+ "cargo_metadata",
+ "chrono",
+ "once_cell",
+ "regex",
+ "serde",
+ "serde_json",
+ "serde_yaml",
  "tera",
  "thiserror 2.0.19",
  "toml",
