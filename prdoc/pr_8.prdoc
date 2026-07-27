@@ -1,0 +1,16 @@
+---
+title: Fixes
+author: balqaasem
+pr: 8
+
+doc:
+  - audience: Developer
+    description: |
+      Changes for PR #8
+
+crates:
+  - name: changelogger-cli
+    bump: minor
+  - name: changelogger-prdoc
+    bump: minor
+---
