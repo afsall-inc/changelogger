@@ -1,0 +1,17 @@
+---
+title: "bump to 0.1.2, add crates.io publish and github release workflows"
+author: balqaasem
+pr: 10
+
+doc:
+  - audience: Developer
+    description: |
+      Bump version to 0.1.2, add crates.io publishing jobs to CD and release workflows,
+      add GitHub Release action, and fix root Cargo.toml crate detection.
+
+crates:
+  - name: changelogger-cli
+    bump: minor
+  - name: changelogger-prdoc
+    bump: minor
+---
