@@ -68,9 +68,13 @@ jobs:
           if gh release view "$TAG" &>/dev/null; then
             echo "Release $TAG already exists — skipping"
           else
+            NOTES=""
+            if [ -f CHANGELOG.md ]; then
+              NOTES="--notes-file CHANGELOG.md"
+            fi
             gh release create "$TAG" \
               --title "changelogger $TAG" \
-              --generate-notes
+              $NOTES
           fi
 
   crates-io:
