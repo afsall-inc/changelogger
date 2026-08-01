@@ -1,0 +1,16 @@
+---
+title: "fix: dynamic version detection in publish workflows"
+author: balqaasem
+pr: 14
+
+doc:
+  - audience: Developer
+    description: |
+      cd.yml uses detect output, release.yml extracts from tag
+
+crates:
+  - name: changelogger-cli
+    bump: minor
+  - name: changelogger-prdoc
+    bump: minor
+---
