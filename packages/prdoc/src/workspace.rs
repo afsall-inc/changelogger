@@ -91,6 +91,24 @@ impl WorkspaceInfo {
         })
     }
 
+    pub fn version(&self) -> String {
+        let cargo_toml = self.root.join("Cargo.toml");
+        let content = std::fs::read_to_string(&cargo_toml).unwrap_or_default();
+        for line in content.lines() {
+            let trimmed = line.trim();
+            if trimmed.starts_with("version =") {
+                return trimmed
+                    .split('=')
+                    .nth(1)
+                    .unwrap_or("0.1.0")
+                    .trim()
+                    .trim_matches('"')
+                    .to_string();
+            }
+        }
+        "0.1.0".to_string()
+    }
+
     pub fn find_crate_for_path(&self, file_path: &str) -> Option<String> {
         let mut best_match: Option<(&String, &String)> = None;
         for (crate_path, name) in &self.crate_by_path {

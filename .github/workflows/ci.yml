@@ -64,6 +64,8 @@ jobs:
         run: cargo fmt --all -- --check
       - name: Install forehead
         run: cargo install forehead-cli
+      - name: Apply headers
+        run: forehead-cli apply
       - name: Check headers
         run: forehead-cli check
       - name: Clippy

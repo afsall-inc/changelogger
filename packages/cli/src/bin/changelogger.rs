@@ -561,76 +561,110 @@ fn cmd_changelog_verify(from: Option<&str>) -> Result<String, String> {
 }
 
 fn cmd_publish(crate_name: Option<&str>) -> Result<String, String> {
-    // Detect version from workspace Cargo.toml
     let root = std::env::current_dir().map_err(|e| format!("{e}"))?;
-    let cargo_toml = root.join("Cargo.toml");
-    let content =
-        std::fs::read_to_string(&cargo_toml).map_err(|e| format!("{e}"))?;
-    let version_line = content
-        .lines()
-        .find(|l| l.trim().starts_with("version ="))
-        .ok_or("could not find version in Cargo.toml")?;
-    let version = version_line
-        .split('=')
-        .nth(1)
-        .ok_or("invalid version line")?
-        .trim()
-        .trim_matches('"')
-        .to_string();
+
+    let ws = changelogger_prdoc::WorkspaceInfo::load_from_root(&root)
+        .map_err(|e| format!("{e}"))?;
+
+    let version = ws.version();
     let major_minor = version
         .rsplitn(2, '.')
         .last()
         .unwrap_or(&version)
         .to_string();
 
-    let crates = if let Some(name) = crate_name {
-        vec![name.to_string()]
+    let publishable: Vec<&changelogger_prdoc::WorkspaceCrate> =
+        ws.crates.iter().filter(|c| c.publish).collect();
+
+    let crates: Vec<&changelogger_prdoc::WorkspaceCrate> = if let Some(name) =
+        crate_name
+    {
+        let c =
+            publishable.iter().find(|c| c.name == name).ok_or_else(|| {
+                format!(
+                    "crate '{name}' not found in workspace or not publishable"
+                )
+            })?;
+        vec![c]
     } else {
-        vec![
-            "changelogger-prdoc".to_string(),
-            "changelogger-cli".to_string(),
-        ]
+        let mut sorted = publishable.clone();
+        sorted.sort_by_key(|c| workspace_dep_count(&c.manifest_path, &ws));
+        sorted
     };
 
-    for crate_name in &crates {
-        println!("Publishing {crate_name} v{version}...");
+    let mut patched_files: Vec<(PathBuf, String)> = Vec::new();
 
-        if *crate_name == "changelogger-cli" {
-            let cli_toml = root.join("packages").join("cli").join("Cargo.toml");
-            let content = std::fs::read_to_string(&cli_toml)
-                .map_err(|e| format!("{e}"))?;
-            let patched = content.replace(
-                "changelogger-prdoc = { path = \"../prdoc\" }",
-                &format!("changelogger-prdoc = \"{major_minor}\""),
-            );
-            std::fs::write(&cli_toml, &patched).map_err(|e| format!("{e}"))?;
+    for crate_info in &crates {
+        println!("Publishing {} v{}...", crate_info.name, version);
+
+        let manifest = &crate_info.manifest_path;
+        let orig =
+            std::fs::read_to_string(manifest).map_err(|e| format!("{e}"))?;
+        let mut patched = orig.clone();
+
+        for ws_crate in &ws.crates {
+            if ws_crate.name == crate_info.name {
+                continue;
+            }
+            let path_line =
+                format!("{} = {{ path = \"../{}", ws_crate.name, ws_crate.name);
+            let ver_line = format!("{} = \"{major_minor}\"", ws_crate.name);
+            if patched.contains(&path_line) {
+                patched = patched.replace(&path_line, &ver_line);
+            }
         }
 
-        let status = std::process::Command::new("cargo")
-            .args(["publish", "-p", crate_name, "--allow-dirty"])
-            .status()
+        if patched != orig {
+            std::fs::write(manifest, &patched).map_err(|e| format!("{e}"))?;
+            patched_files.push((manifest.clone(), orig));
+        }
+
+        let output = std::process::Command::new("cargo")
+            .args(["publish", "-p", &crate_info.name, "--allow-dirty"])
+            .output()
             .map_err(|e| format!("failed to run cargo publish: {e}"))?;
 
-        if !status.success() {
-            return Err(format!("publish failed for {crate_name}"));
-        }
+        let stderr = String::from_utf8_lossy(&output.stderr);
 
-        // Restore path dep for cli
-        if *crate_name == "changelogger-cli" {
-            let cli_toml = root.join("packages").join("cli").join("Cargo.toml");
-            let content = std::fs::read_to_string(&cli_toml)
-                .map_err(|e| format!("{e}"))?;
-            let patched = content.replace(
-                &format!("changelogger-prdoc = \"{major_minor}\""),
-                "changelogger-prdoc = { path = \"../prdoc\" }",
+        if output.status.success() {
+            println!("Published {} v{}", crate_info.name, version);
+        } else if stderr.contains("already exists")
+            || stderr.contains("already uploaded")
+        {
+            println!(
+                "{} v{} already published — skipping",
+                crate_info.name, version
             );
-            std::fs::write(&cli_toml, &patched).map_err(|e| format!("{e}"))?;
+        } else {
+            for (path, content) in &patched_files {
+                let _ = std::fs::write(path, content);
+            }
+            return Err(format!(
+                "publish failed for {}:\n{}",
+                crate_info.name, stderr
+            ));
         }
+    }
 
-        println!("Published {crate_name} v{version}");
+    for (path, content) in &patched_files {
+        std::fs::write(path, content).map_err(|e| format!("{e}"))?;
     }
 
     Ok("All crates published successfully.".to_string())
+}
+
+fn workspace_dep_count(
+    manifest_path: &PathBuf,
+    ws: &changelogger_prdoc::WorkspaceInfo,
+) -> usize {
+    let content = match std::fs::read_to_string(manifest_path) {
+        Ok(c) => c,
+        Err(_) => return 0,
+    };
+    ws.crates
+        .iter()
+        .filter(|c| content.contains(&format!("{} = {{ path = ", c.name)))
+        .count()
 }
 
 const CI_WORKFLOW: &str = r#"name: CI
