@@ -164,11 +164,9 @@ fn run_prdoc(cmd: PrdocCmd) -> Result<String, String> {
     match cmd {
         PrdocCmd::Init => cmd_init(),
         PrdocCmd::Show { path } => cmd_show(&path),
-        PrdocCmd::Validate {
-            path,
-            branch,
-            fix,
-        } => cmd_validate(&path, branch.as_deref(), fix),
+        PrdocCmd::Validate { path, branch, fix } => {
+            cmd_validate(&path, branch.as_deref(), fix)
+        }
         PrdocCmd::Generate {
             pr,
             from,
@@ -242,7 +240,11 @@ fn cmd_show(path: &str) -> Result<String, String> {
     serde_json::to_string_pretty(&prdoc).map_err(|e| e.to_string())
 }
 
-fn cmd_validate(path: &str, branch: Option<&str>, fix: bool) -> Result<String, String> {
+fn cmd_validate(
+    path: &str,
+    branch: Option<&str>,
+    fix: bool,
+) -> Result<String, String> {
     let path = PathBuf::from(path);
 
     if path.is_dir() {
@@ -259,7 +261,11 @@ fn cmd_validate(path: &str, branch: Option<&str>, fix: bool) -> Result<String, S
                 match changelogger_prdoc::load_and_fix_prdoc(&entry) {
                     Ok((p, fixes)) => {
                         for f in &fixes {
-                            all_fixes.push(format!("{}: {}", entry.display(), f));
+                            all_fixes.push(format!(
+                                "{}: {}",
+                                entry.display(),
+                                f
+                            ));
                         }
                         p
                     }
@@ -278,7 +284,10 @@ fn cmd_validate(path: &str, branch: Option<&str>, fix: bool) -> Result<String, S
                 }
             };
             let issues = if let Some(branch_name) = branch {
-                changelogger_prdoc::validate_prdoc_for_branch(&prdoc, branch_name)
+                changelogger_prdoc::validate_prdoc_for_branch(
+                    &prdoc,
+                    branch_name,
+                )
             } else {
                 changelogger_prdoc::validate_prdoc(&prdoc)
             };
@@ -286,7 +295,11 @@ fn cmd_validate(path: &str, branch: Option<&str>, fix: bool) -> Result<String, S
                 all_issues.push(format!(
                     "{}:\n{}",
                     entry.display(),
-                    issues.iter().map(|i| format!("  - {i}")).collect::<Vec<_>>().join("\n")
+                    issues
+                        .iter()
+                        .map(|i| format!("  - {i}"))
+                        .collect::<Vec<_>>()
+                        .join("\n")
                 ));
             }
         }
