@@ -606,11 +606,18 @@ fn cmd_publish(crate_name: Option<&str>) -> Result<String, String> {
             if ws_crate.name == crate_info.name {
                 continue;
             }
-            let path_line =
-                format!("{} = {{ path = \"../{}", ws_crate.name, ws_crate.name);
-            let ver_line = format!("{} = \"{major_minor}\"", ws_crate.name);
-            if patched.contains(&path_line) {
-                patched = patched.replace(&path_line, &ver_line);
+            // Find the exact path dep line and replace it with a version dep
+            let path_dep = format!("{} = {{ path = \"", ws_crate.name);
+            if patched.contains(&path_dep) {
+                let mut new_lines = Vec::new();
+                for line in patched.lines() {
+                    if line.trim().starts_with(&path_dep) {
+                        new_lines.push(format!("{} = \"{}\"", ws_crate.name, major_minor));
+                    } else {
+                        new_lines.push(line.to_string());
+                    }
+                }
+                patched = new_lines.join("\n") + "\n";
             }
         }
 
