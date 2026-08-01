@@ -61,6 +61,12 @@ enum Commands {
         #[command(subcommand)]
         cmd: ChangelogCmd,
     },
+    /// Publish crates to crates.io
+    Publish {
+        /// Crate to publish (default: all workspace crates)
+        #[arg(long)]
+        crate_name: Option<String>,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -80,9 +86,6 @@ enum PrdocCmd {
         /// Branch name for backport validation
         #[arg(long)]
         branch: Option<String>,
-        /// Auto-fix common issues (empty/missing crates, placeholder descriptions)
-        #[arg(long)]
-        fix: bool,
     },
     /// Auto-generate a prdoc skeleton
     Generate {
@@ -157,6 +160,7 @@ fn run_command(cli: Cli) -> Result<String, String> {
     match cli.command {
         Commands::Prdoc { cmd } => run_prdoc(cmd),
         Commands::Changelog { cmd } => run_changelog(cmd),
+        Commands::Publish { crate_name } => cmd_publish(crate_name.as_deref()),
     }
 }
 
@@ -164,8 +168,8 @@ fn run_prdoc(cmd: PrdocCmd) -> Result<String, String> {
     match cmd {
         PrdocCmd::Init => cmd_init(),
         PrdocCmd::Show { path } => cmd_show(&path),
-        PrdocCmd::Validate { path, branch, fix } => {
-            cmd_validate(&path, branch.as_deref(), fix)
+        PrdocCmd::Validate { path, branch } => {
+            cmd_validate(&path, branch.as_deref())
         }
         PrdocCmd::Generate {
             pr,
@@ -240,16 +244,11 @@ fn cmd_show(path: &str) -> Result<String, String> {
     serde_json::to_string_pretty(&prdoc).map_err(|e| e.to_string())
 }
 
-fn cmd_validate(
-    path: &str,
-    branch: Option<&str>,
-    fix: bool,
-) -> Result<String, String> {
+fn cmd_validate(path: &str, branch: Option<&str>) -> Result<String, String> {
     let path = PathBuf::from(path);
 
     if path.is_dir() {
         let mut all_issues = Vec::new();
-        let mut all_fixes = Vec::new();
         let mut count = 0usize;
         let entries = changelogger_prdoc::walk_dir(&path).unwrap_or_default();
         for entry in entries {
@@ -257,30 +256,11 @@ fn cmd_validate(
                 continue;
             }
             count += 1;
-            let prdoc = if fix {
-                match changelogger_prdoc::load_and_fix_prdoc(&entry) {
-                    Ok((p, fixes)) => {
-                        for f in &fixes {
-                            all_fixes.push(format!(
-                                "{}: {}",
-                                entry.display(),
-                                f
-                            ));
-                        }
-                        p
-                    }
-                    Err(e) => {
-                        all_issues.push(format!("{}: {}", entry.display(), e));
-                        continue;
-                    }
-                }
-            } else {
-                match changelogger_prdoc::load_prdoc(&entry) {
-                    Ok(p) => p,
-                    Err(e) => {
-                        all_issues.push(format!("{}: {}", entry.display(), e));
-                        continue;
-                    }
+            let prdoc = match changelogger_prdoc::load_prdoc(&entry) {
+                Ok(p) => p,
+                Err(e) => {
+                    all_issues.push(format!("{}: {}", entry.display(), e));
+                    continue;
                 }
             };
             let issues = if let Some(branch_name) = branch {
@@ -303,20 +283,10 @@ fn cmd_validate(
                 ));
             }
         }
-        let mut out = String::new();
-        if !all_fixes.is_empty() {
-            out.push_str(&format!("Fixed {} issue(s):\n", all_fixes.len()));
-            for f in &all_fixes {
-                out.push_str(&format!("  - {f}\n"));
-            }
-            out.push('\n');
-        }
         if all_issues.is_empty() {
-            out.push_str(&format!("Validated {count} prdoc file(s)."));
-            Ok(out)
+            Ok(format!("Validated {count} prdoc file(s)."))
         } else {
-            out.push_str(&all_issues.join("\n"));
-            Err(out)
+            Err(all_issues.join("\n"))
         }
     } else {
         if !path.exists() {
@@ -328,19 +298,8 @@ fn cmd_validate(
             }
             return Ok("No prdoc found. Validation skipped.".to_string());
         }
-        let prdoc = if fix {
-            match changelogger_prdoc::load_and_fix_prdoc(&path) {
-                Ok((p, fixes)) => {
-                    if !fixes.is_empty() {
-                        println!("Fixed: {}", fixes.join(", "));
-                    }
-                    p
-                }
-                Err(e) => return Err(e.to_string()),
-            }
-        } else {
-            changelogger_prdoc::load_prdoc(&path).map_err(|e| e.to_string())?
-        };
+        let prdoc =
+            changelogger_prdoc::load_prdoc(&path).map_err(|e| e.to_string())?;
         let issues = if let Some(branch_name) = branch {
             changelogger_prdoc::validate_prdoc_for_branch(&prdoc, branch_name)
         } else {
@@ -551,4 +510,77 @@ fn cmd_changelog_verify(from: Option<&str>) -> Result<String, String> {
             prdocs.len(),
         ))
     }
+}
+
+fn cmd_publish(crate_name: Option<&str>) -> Result<String, String> {
+    // Detect version from workspace Cargo.toml
+    let root = std::env::current_dir().map_err(|e| format!("{e}"))?;
+    let cargo_toml = root.join("Cargo.toml");
+    let content =
+        std::fs::read_to_string(&cargo_toml).map_err(|e| format!("{e}"))?;
+    let version_line = content
+        .lines()
+        .find(|l| l.trim().starts_with("version ="))
+        .ok_or("could not find version in Cargo.toml")?;
+    let version = version_line
+        .split('=')
+        .nth(1)
+        .ok_or("invalid version line")?
+        .trim()
+        .trim_matches('"')
+        .to_string();
+    let major_minor = version
+        .rsplitn(2, '.')
+        .last()
+        .unwrap_or(&version)
+        .to_string();
+
+    let crates = if let Some(name) = crate_name {
+        vec![name.to_string()]
+    } else {
+        vec![
+            "changelogger-prdoc".to_string(),
+            "changelogger-cli".to_string(),
+        ]
+    };
+
+    for crate_name in &crates {
+        println!("Publishing {crate_name} v{version}...");
+
+        if *crate_name == "changelogger-cli" {
+            let cli_toml = root.join("packages").join("cli").join("Cargo.toml");
+            let content = std::fs::read_to_string(&cli_toml)
+                .map_err(|e| format!("{e}"))?;
+            let patched = content.replace(
+                "changelogger-prdoc = { path = \"../prdoc\" }",
+                &format!("changelogger-prdoc = \"{major_minor}\""),
+            );
+            std::fs::write(&cli_toml, &patched).map_err(|e| format!("{e}"))?;
+        }
+
+        let status = std::process::Command::new("cargo")
+            .args(["publish", "-p", crate_name, "--allow-dirty"])
+            .status()
+            .map_err(|e| format!("failed to run cargo publish: {e}"))?;
+
+        if !status.success() {
+            return Err(format!("publish failed for {crate_name}"));
+        }
+
+        // Restore path dep for cli
+        if *crate_name == "changelogger-cli" {
+            let cli_toml = root.join("packages").join("cli").join("Cargo.toml");
+            let content = std::fs::read_to_string(&cli_toml)
+                .map_err(|e| format!("{e}"))?;
+            let patched = content.replace(
+                &format!("changelogger-prdoc = \"{major_minor}\""),
+                "changelogger-prdoc = { path = \"../prdoc\" }",
+            );
+            std::fs::write(&cli_toml, &patched).map_err(|e| format!("{e}"))?;
+        }
+
+        println!("Published {crate_name} v{version}");
+    }
+
+    Ok("All crates published successfully.".to_string())
 }
