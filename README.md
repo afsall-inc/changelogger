@@ -2,49 +2,65 @@
 
 **changelogger** is a Rust tool for generating structured PR documentation (prdocs) and changelogs. It's designed for CI/CD — every PR gets a machine-readable prdoc file that describes what changed, which crates were affected, and what SemVer bump each crate needs. At release time, prdocs are aggregated into a `CHANGELOG.md`.
 
-Inspired by the [Polkadot SDK](https://github.com/paritytech/polkadot-sdk) prdoc system. Used by [MontRS](https://github.com/afsall-inc/montrs) and [Setheum](https://github.com/setheum/setheum).
+Inspired by the [Polkadot SDK](https://github.com/paritytech/polkadot-sdk) prdoc system. Used by [MontRS](https://github.com/afsall-labs/montrs) and [Setheum](https://github.com/setheum/setheum).
 
-## Why PRDoc?
+## How It Works
 
-PRs are the best source of truth for what changed. But PR descriptions are free-form and hard to automate. prdoc files are structured YAML files that live alongside your code:
-
-```yaml
-title: "Add XCM send support to ink_env"
-doc:
-  - audience: Developer
-    description: |
-      Adds xcm_send for contracts to submit XCM messages.
-crates:
-  - name: ink_env
-    bump: minor
 ```
-
-This enables:
-- **Automated changelogs** — no manual release notes
-- **SemVer tracking** — know exactly which crates need bumping
-- **Audience-targeted docs** — different descriptions for devs, users, operators
-- **CI enforcement** — every PR must document its changes
+PR opened → PRDoc workflow generates prdoc/pr_N.prdoc
+                ↓
+PR merged → CD workflow detects version bump
+                ↓
+Generates CHANGELOG.md from prdoc/ directory
+                ↓
+Commits CHANGELOG.md + creates vX.Y.Z tag
+                ↓
+Release workflow: GitHub Release, crates.io publish, Docker push
+```
 
 ## Quick Start
 
-```bash
-# Install
-cargo install changelogger-cli
+### 1. Install
 
-# Init a project
+```bash
+cargo install changelogger-cli
+```
+
+### 2. Init a project
+
+```bash
 cd my-rust-project
 changelogger prdoc init
-# Creates: changelogger.toml, prdoc/schema_user.json
-
-# Generate a prdoc for a PR (requires gh CLI)
-changelogger prdoc generate --pr 42
-
-# Validate
-changelogger prdoc validate prdoc/pr_42.prdoc
-
-# At release time, generate changelog
-changelogger changelog generate --from v0.1.0
 ```
+
+This creates:
+- `changelogger.toml` — project configuration
+- `prdoc/schema_user.json` — JSON Schema for validation
+
+### 3. Add CI/CD
+
+Copy these workflows from changelogger's own `.github/workflows/`:
+
+- **`prdoc.yml`** — on PR open/sync, auto-generates prdoc from the diff, validates it, commits it back
+- **`cd.yml`** — on push to main, detects version bumps, generates CHANGELOG, creates tags, publishes to crates.io + Docker
+- **`release.yml`** — on tag push, creates GitHub Release + publishes
+
+### 4. Make a PR
+
+Create a PR, and the PRDoc workflow will:
+1. Fetch the diff, title, and body via `gh`
+2. Analyze the diff to determine which crates changed and what bump levels
+3. Generate `prdoc/pr_N.prdoc` 
+4. Validate it
+5. Commit it to the PR branch
+
+### 5. Release
+
+Merge to main. When the version in `Cargo.toml` changes, the CD workflow:
+1. Generates `CHANGELOG.md` from all prdoc files
+2. Commits it
+3. Creates a `vX.Y.Z` tag and pushes it
+4. Publishes to crates.io and ghcr.io
 
 ## CLI
 
@@ -55,7 +71,8 @@ changelogger prdoc generate --from v1.0.0..HEAD  # From git commit range
 changelogger prdoc generate --diff patch.diff    # From a diff file
 changelogger prdoc validate                      # Validate all prdoc files
 changelogger prdoc show prdoc/pr_42.prdoc        # Display as JSON
-changelogger changelog generate --from v1.0.0    # Generate CHANGELOG.md
+changelogger changelog generate --from v1.0.0    # Generate CHANGELOG.md from git range
+changelogger changelog generate --dir prdoc      # Generate CHANGELOG.md from prdoc directory
 changelogger changelog bump --current 0.1.0      # Compute next versions
 changelogger changelog verify --from v1.0.0      # Check all commits have prdocs
 ```
@@ -89,9 +106,77 @@ user = "App Dev"
 operator = "Node Operator"
 ```
 
+## PRDoc Format
+
+A prdoc file is a YAML file in `prdoc/pr_N.prdoc`:
+
+```yaml
+---
+title: "Add XCM send support to ink_env"
+author: @username
+pr: 42
+doc:
+  - audience: Developer
+    description: |
+      Adds xcm_send for contracts to submit XCM messages.
+crates:
+  - name: ink_env
+    bump: minor
+---
+```
+
+### Fields
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `title` | yes | Short description of the change |
+| `author` | no | GitHub handle |
+| `pr` | no | PR number |
+| `doc` | yes | Array of audience-specific descriptions |
+| `crates` | yes | Array of affected crates with bump levels |
+| `migrations` | no | Database and runtime migrations |
+| `host_functions` | no | Host function changes |
+
+### Bump Levels
+
+| Bump | When to use |
+|------|-------------|
+| `major` | Breaking public API changes |
+| `minor` | New public API additions |
+| `patch` | Bug fixes, internal changes |
+| `none` | No observable change (docs, CI, comments) |
+
+### Audiences
+
+| Audience | Who they are |
+|----------|-------------|
+| `Developer` | People consuming the library or writing code against it |
+| `User` | End users of the tool |
+| `Operator` | CI/CD pipeline maintainers |
+
+## Changelog Format
+
+Generated changelogs follow [Keep a Changelog](https://keepachangelog.com/) with entries grouped by category:
+
+```
+# Changelog
+
+## [Unreleased]
+
+### Added
+
+- Add XCM send support to ink_env [ink_env(patch)] (#42)
+
+### Fixed
+
+- Fix null pointer in storage [ink_storage(patch)] (#41)
+```
+
+Categories are inferred from bump levels: `major` → Removed, `minor` → Added, `patch` → Fixed.
+
 ## CI/CD
 
-### Auto-generate + validate on PR
+### PRDoc Workflow (auto-generate + validate on PR)
 
 ```yaml
 # .github/workflows/prdoc.yml
@@ -130,25 +215,58 @@ jobs:
           file_pattern: "prdoc/*.prdoc"
 ```
 
-## Changelog Format
+### CD Workflow (auto-changelog + publish on version bump)
 
-Generated changelogs follow [Keep a Changelog](https://keepachangelog.com/) with entries grouped by category:
+```yaml
+# .github/workflows/cd.yml
+name: CD
+on:
+  push:
+    branches: [main]
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      changed: ${{ steps.version.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - id: version
+        run: |
+          VERSION=$(grep '^version = ' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if git show HEAD~1:Cargo.toml | grep -q "^version = \"$VERSION\""; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
 
+  changelog:
+    needs: detect
+    if: needs.detect.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@v1
+        with: { toolchain: stable }
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo install changelogger-cli
+      - run: changelogger changelog generate --dir prdoc --output CHANGELOG.md
+      - run: |
+          VERSION=${{ needs.detect.outputs.version }}
+          git config user.name "bot"
+          git config user.email "bot@github.com"
+          git add CHANGELOG.md
+          git commit -m "changelog: auto-generate for v${VERSION}"
+          git tag "v${VERSION}"
+          git push origin "v${VERSION}"
 ```
-# Changelog
-
-## [Unreleased]
-
-### Added
-
-- Add XCM send support to ink_env [ink_env(patch)] (#42)
-
-### Fixed
-
-- Fix null pointer in storage [ink_storage(patch)] (#41)
-```
-
-Categories are inferred from bump levels: `major` → Removed, `minor` → Added, `patch` → Fixed.
 
 ## Crates
 
@@ -157,17 +275,13 @@ Categories are inferred from bump levels: `major` → Removed, `minor` → Added
 | [changelogger-prdoc](https://crates.io/crates/changelogger-prdoc) | Core library: types, parse, validate, analyze, changelog |
 | [changelogger-cli](https://crates.io/crates/changelogger-cli) | CLI binary (`cargo install changelogger-cli`) |
 
-## License
-
-Licensed under either of [Apache License, Version 2.0](LICENSE-APACHE) or [MIT License](LICENSE-MIT), at your option.
-
 ## Docker
-
-Pre-built images are available on GitHub Container Registry:
 
 ```bash
 docker pull ghcr.io/afsall-inc/changelogger:latest
 docker run ghcr.io/afsall-inc/changelogger --help
 ```
 
-Images are published automatically on version bumps (via `cd.yml`) and on tag push `v*` (via `release.yml`).
+## License
+
+Licensed under either of [Apache License, Version 2.0](LICENSE-APACHE) or [MIT License](LICENSE-MIT), at your option.
