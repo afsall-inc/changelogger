@@ -13,5 +13,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Publish cli [changelogger-cli(minor), changelogger-prdoc(minor)] (#7)
 - bump to 0.1.2 [changelogger-prdoc(minor)] (#9)
 - bump to 0.1.2, add crates.io publish and github release workflows [changelogger-cli(minor), changelogger-prdoc(minor)] (#10)
+- feat: auto-changelog, auto-tag, and release notes [changelogger-prdoc(minor)] (#12)
 - init: scaffold changelogger workspace with prdoc library and CLI [changelogger-cli(minor), changelogger-prdoc(minor)] (#4)
 
