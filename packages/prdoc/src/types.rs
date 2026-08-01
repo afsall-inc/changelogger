@@ -291,8 +291,8 @@ pub fn fix_prdoc_content(content: &mut String) -> Vec<String> {
     // Fix missing crates section entirely (no `- name:` anywhere)
     if !content.contains("- name:") {
         let trimmed = content.trim_end();
-        if trimmed.ends_with("---") {
-            let base = trimmed[..trimmed.len() - 3].trim_end().to_string();
+        if let Some(stripped) = trimmed.strip_suffix("---") {
+            let base = stripped.trim_end().to_string();
             *content = format!(
                 "{}\ncrates:\n  - name: changelogger-cli\n    bump: \
                  patch\n---\n",
