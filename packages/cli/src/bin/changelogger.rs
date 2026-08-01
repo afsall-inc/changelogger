@@ -61,6 +61,11 @@ enum Commands {
         #[command(subcommand)]
         cmd: ChangelogCmd,
     },
+    /// CI/CD workflow scaffolding
+    Ci {
+        #[command(subcommand)]
+        cmd: CiCmd,
+    },
     /// Publish crates to crates.io
     Publish {
         /// Crate to publish (default: all workspace crates)
@@ -144,6 +149,12 @@ enum ChangelogCmd {
     },
 }
 
+#[derive(Subcommand, Debug)]
+enum CiCmd {
+    /// Scaffold CI/CD workflows (prdoc.yml, cd.yml, release.yml, ci.yml)
+    Init,
+}
+
 fn main() {
     let cli = Cli::parse();
     let result = run_command(cli);
@@ -160,6 +171,7 @@ fn run_command(cli: Cli) -> Result<String, String> {
     match cli.command {
         Commands::Prdoc { cmd } => run_prdoc(cmd),
         Commands::Changelog { cmd } => run_changelog(cmd),
+        Commands::Ci { cmd } => run_ci(cmd),
         Commands::Publish { crate_name } => cmd_publish(crate_name.as_deref()),
     }
 }
@@ -201,6 +213,42 @@ fn run_changelog(cmd: ChangelogCmd) -> Result<String, String> {
         } => cmd_changelog_bump(&current, from.as_deref(), dry_run),
         ChangelogCmd::Verify { from } => cmd_changelog_verify(from.as_deref()),
     }
+}
+
+fn run_ci(cmd: CiCmd) -> Result<String, String> {
+    match cmd {
+        CiCmd::Init => cmd_ci_init(),
+    }
+}
+
+fn cmd_ci_init() -> Result<String, String> {
+    let root = std::env::current_dir().map_err(|e| format!("{e}"))?;
+    let workflows_dir = root.join(".github").join("workflows");
+    std::fs::create_dir_all(&workflows_dir).map_err(|e| format!("{e}"))?;
+
+    let workflows = [
+        ("ci.yml", CI_WORKFLOW),
+        ("prdoc.yml", PRDOC_WORKFLOW),
+        ("cd.yml", CD_WORKFLOW),
+        ("release.yml", RELEASE_WORKFLOW),
+    ];
+
+    let mut written = Vec::new();
+    for (name, content) in &workflows {
+        let path = workflows_dir.join(name);
+        if path.exists() {
+            written.push(format!("{name} (already exists, skipped)"));
+        } else {
+            std::fs::write(&path, content).map_err(|e| format!("{e}"))?;
+            written.push(name.to_string());
+        }
+    }
+
+    Ok(format!(
+        "Scaffolded {} workflow(s) in .github/workflows/:\n  - {}",
+        written.len(),
+        written.join("\n  - "),
+    ))
 }
 
 fn cmd_init() -> Result<String, String> {
@@ -584,3 +632,302 @@ fn cmd_publish(crate_name: Option<&str>) -> Result<String, String> {
 
     Ok("All crates published successfully.".to_string())
 }
+
+const CI_WORKFLOW: &str = r#"name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        run: cargo clippy --workspace -- -D warnings
+      - name: Run tests
+        run: cargo test --workspace
+      - name: Build
+        run: cargo build --workspace
+"#;
+
+const PRDOC_WORKFLOW: &str = r#"name: PRDoc
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        ref: ${{ github.head_ref }}
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@v1
+      with:
+        toolchain: stable
+    - uses: Swatinem/rust-cache@v2
+    - name: Install changelogger
+      run: cargo install changelogger-cli
+    - name: Generate PRDoc
+      id: generate
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        PR_NUM=${{ github.event.pull_request.number }}
+        PRDOC="prdoc/pr_${PR_NUM}.prdoc"
+        if [ -f "$PRDOC" ]; then
+          echo "PRDoc already exists — validating only"
+          echo "generated=false" >> "$GITHUB_OUTPUT"
+        else
+          changelogger prdoc generate --pr "$PR_NUM" --force
+          echo "generated=true" >> "$GITHUB_OUTPUT"
+        fi
+    - name: Validate and auto-fix PRDoc
+      env:
+        CI: "true"
+      run: |
+        PRDOC="prdoc/pr_${{ github.event.pull_request.number }}.prdoc"
+        changelogger prdoc validate --fix "$PRDOC"
+    - name: Validate Backport Rules
+      if: startsWith(github.base_ref, 'stable') || startsWith(github.base_ref, 'release')
+      run: |
+        PRDOC="prdoc/pr_${{ github.event.pull_request.number }}.prdoc"
+        changelogger prdoc validate --fix --branch "${{ github.base_ref }}" "$PRDOC"
+    - name: Commit PRDoc
+      if: steps.generate.outputs.generated == 'true'
+      uses: stefanzweifel/git-auto-commit-action@v5
+      with:
+        commit_message: "Add prdoc for PR #${{ github.event.pull_request.number }} (auto-generated)"
+        branch: ${{ github.head_ref }}
+        file_pattern: "prdoc/*.prdoc"
+"#;
+
+const CD_WORKFLOW: &str = r#"name: CD
+on:
+  push:
+    branches: [main]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      changed: ${{ steps.version.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Detect version bump
+        id: version
+        run: |
+          VERSION=$(grep '^version = ' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if git show HEAD~1:Cargo.toml 2>/dev/null | grep -q "^version = \"$VERSION\""; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  changelog:
+    needs: detect
+    if: needs.detect.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install changelogger
+        run: cargo install changelogger-cli
+      - name: Generate CHANGELOG
+        run: changelogger changelog generate --dir prdoc --output CHANGELOG.md
+      - name: Commit and tag
+        run: |
+          VERSION=${{ needs.detect.outputs.version }}
+          git config user.name "changelogger-bot"
+          git config user.email "bot@github.com"
+          git add CHANGELOG.md
+          git commit -m "changelog: auto-generate for v${VERSION}"
+          git tag "v${VERSION}"
+          git push origin "v${VERSION}"
+
+  crates-io:
+    needs: detect
+    if: needs.detect.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install changelogger
+        run: cargo install changelogger-cli
+      - name: Publish to crates.io
+        run: changelogger publish
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+  container:
+    needs: detect
+    if: needs.detect.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}},value=v${{ needs.detect.outputs.version }}
+            type=semver,pattern={{major}}.{{minor}},value=v${{ needs.detect.outputs.version }}
+            type=raw,value=latest
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+"#;
+
+const RELEASE_WORKFLOW: &str = r#"name: Release
+on:
+  push:
+    tags: ['v*']
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  github-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build
+        run: cargo build --release --workspace
+      - name: Create GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.ref_name }}"
+          if gh release view "$TAG" &>/dev/null; then
+            echo "Release $TAG already exists — skipping"
+          else
+            NOTES=""
+            if [ -f CHANGELOG.md ]; then
+              NOTES="--notes-file CHANGELOG.md"
+            fi
+            gh release create "$TAG" \
+              --title "changelogger $TAG" \
+              $NOTES
+          fi
+
+  crates-io:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install changelogger
+        run: cargo install changelogger-cli
+      - name: Publish to crates.io
+        run: changelogger publish
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+  container:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.VERSION }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.description=Changelogger — auto generate CHANGELOGs and prdocs
+            org.opencontainers.image.licenses=Apache-2.0 OR MIT
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+"#;
