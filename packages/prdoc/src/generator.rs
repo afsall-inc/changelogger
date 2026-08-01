@@ -36,6 +36,7 @@
 // SOFTWARE.
 
 use crate::{
+    analyzer::analyze_diff,
     types::{Audience, BumpLevel, CrateChange, DocSection, PrDoc},
     workspace::WorkspaceInfo,
 };
@@ -52,6 +53,8 @@ pub struct GenerateOptions {
 pub fn generate_prdoc(opts: &GenerateOptions) -> Result<PrDoc, String> {
     let pr_info = fetch_pr_info(opts.pr_number)?;
     let diff = get_pr_diff(opts.pr_number)?;
+
+    let analysis = analyze_diff(&diff, None);
     let modified_crates =
         extract_modified_crates(&diff, opts.workspace.as_ref())?;
 
@@ -71,11 +74,19 @@ pub fn generate_prdoc(opts: &GenerateOptions) -> Result<PrDoc, String> {
     } else {
         modified_crates
             .iter()
-            .map(|name| CrateChange {
-                name: name.clone(),
-                bump: opts.bump.clone(),
-                validate: true,
-                note: None,
+            .map(|name| {
+                let bump = analysis
+                    .crate_changes
+                    .iter()
+                    .find(|c| c.name == *name)
+                    .map(|c| c.bump.clone())
+                    .unwrap_or_else(|| opts.bump.clone());
+                CrateChange {
+                    name: name.clone(),
+                    bump,
+                    validate: true,
+                    note: None,
+                }
             })
             .collect()
     };
@@ -208,16 +219,12 @@ fn extract_modified_crates(
         }
     }
 
-    // If no specific crate matched but the root Cargo.toml changed (e.g. version bump),
-    // include all publishable workspace crates.
-    if crates.is_empty() {
-        let root_changed = changed_paths
-            .iter()
-            .any(|p| p == "Cargo.toml" || p.starts_with("Cargo.toml"));
-        if root_changed {
-            for name in &workspace_packages {
-                crates.insert(name.to_string());
-            }
+    // If no specific crate matched any changed file, include all
+    // publishable workspace crates (covers CI-only changes, root
+    // Cargo.toml bumps, and other non-crate-path changes).
+    if crates.is_empty() && !changed_paths.is_empty() {
+        for name in &workspace_packages {
+            crates.insert(name.to_string());
         }
     }
 

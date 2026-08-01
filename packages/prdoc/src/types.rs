@@ -268,6 +268,69 @@ fn extract_frontmatter(content: &str) -> Result<String, PrdocError> {
     Ok(trimmed[3..end + 3].trim().to_string())
 }
 
+/// Fix common issues in a prdoc file content in-place.
+/// Returns list of fixes applied.
+pub fn fix_prdoc_content(content: &mut String) -> Vec<String> {
+    let mut fixes = Vec::new();
+
+    // Fix empty crates section: `crates: []` or `crates: [ ]` or `crates:\n`
+    let empty_crates_re =
+        regex::Regex::new(r"(?m)^crates:\s*\[\s*\]\s*$").unwrap();
+    if empty_crates_re.is_match(content) {
+        *content = empty_crates_re
+            .replace(
+                content,
+                "crates:\n  - name: changelogger-cli\n    bump: patch",
+            )
+            .to_string();
+        fixes.push(
+            "replaced empty crates section with default crate".to_string(),
+        );
+    }
+
+    // Fix missing crates section entirely (no `- name:` anywhere)
+    if !content.contains("- name:") {
+        let trimmed = content.trim_end();
+        if let Some(stripped) = trimmed.strip_suffix("---") {
+            let base = stripped.trim_end().to_string();
+            *content = format!(
+                "{}\ncrates:\n  - name: changelogger-cli\n    bump: \
+                 patch\n---\n",
+                base
+            );
+        } else {
+            *content = format!(
+                "{}\ncrates:\n  - name: changelogger-cli\n    bump: patch\n",
+                trimmed
+            );
+        }
+        fixes.push(
+            "added missing crates section with default crate".to_string(),
+        );
+    }
+
+    // Fix placeholder descriptions
+    if content.contains("description: |\n      ...") {
+        *content = content.replace("...", "auto-fixed: see PR description");
+        fixes.push("replaced placeholder description".to_string());
+    }
+
+    fixes
+}
+
+/// Load, fix, and re-validate a prdoc file. Returns the fixed PrDoc and list of fixes.
+pub fn load_and_fix_prdoc(
+    path: &Path,
+) -> Result<(PrDoc, Vec<String>), PrdocError> {
+    let mut content = std::fs::read_to_string(path)?;
+    let fixes = fix_prdoc_content(&mut content);
+    if !fixes.is_empty() {
+        std::fs::write(path, &content).map_err(PrdocError::Io)?;
+    }
+    let prdoc = parse_prdoc(&content)?;
+    Ok((prdoc, fixes))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
