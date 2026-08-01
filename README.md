@@ -161,6 +161,18 @@ Categories are inferred from bump levels: `major` → Removed, `minor` → Added
 
 Licensed under either of [Apache License, Version 2.0](LICENSE-APACHE) or [MIT License](LICENSE-MIT), at your option.
 
+## Glossary
+
+| Term | Definition |
+|------|------------|
+| **prdoc** | A YAML file at `prdoc/pr_N.prdoc` that documents a single pull request — title, description per audience, affected crates, and SemVer bumps. |
+| **changelog** | A `CHANGELOG.md` file following [Keep a Changelog](https://keepachangelog.com/) format, auto-generated from all prdoc files. |
+| **bump** | A SemVer version increment (`major`, `minor`, `patch`, `none`) declared per crate in a prdoc. |
+| **audience** | A target reader group for a documentation section (e.g., `Developer`, `User`, `Operator`). |
+| **CD** | Continuous Delivery. On version bump detection, changelogger generates CHANGELOG, creates a git tag, publishes to crates.io and ghcr.io. |
+| **PRDoc workflow** | GitHub Action that runs on PR open/sync — generates `prdoc/pr_N.prdoc` from the PR diff, validates it, and commits it to the branch. |
+| **forehead** | A tool for maintaining license headers in source files. Used in changelogger's CI to ensure all files have the Apache-2.0 OR MIT header. |
+
 ## Docker
 
 Pre-built images are available on GitHub Container Registry:

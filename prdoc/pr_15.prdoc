@@ -1,0 +1,16 @@
+---
+title: "feat: changelogger ci init, glossary, close #6 and #13"
+author: balqaasem
+pr: 15
+
+doc:
+  - audience: Developer
+    description: |
+      Changes for PR #15
+
+crates:
+  - name: changelogger-cli
+    bump: minor
+  - name: changelogger-prdoc
+    bump: minor
+---
