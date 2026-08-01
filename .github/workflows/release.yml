@@ -84,17 +84,10 @@ jobs:
         with:
           toolchain: stable
       - uses: Swatinem/rust-cache@v2
-      - name: Publish changelogger-prdoc
-        run: cargo publish -p changelogger-prdoc
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-      - name: Publish changelogger-cli
-        run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          MAJOR_MINOR="${VERSION%.*}"
-          sed -i "s|path = \"../prdoc\"|version = \"$MAJOR_MINOR\"|" packages/cli/Cargo.toml
-          cargo publish -p changelogger-cli --allow-dirty
-          sed -i "s|changelogger-prdoc = { version = \"$MAJOR_MINOR\" }|changelogger-prdoc = { path = \"../prdoc\" }|" packages/cli/Cargo.toml
+      - name: Build CLI
+        run: cargo build --package changelogger-cli
+      - name: Publish to crates.io
+        run: cargo run --package changelogger-cli -- publish
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 

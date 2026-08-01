@@ -61,6 +61,12 @@ enum Commands {
         #[command(subcommand)]
         cmd: ChangelogCmd,
     },
+    /// Publish crates to crates.io
+    Publish {
+        /// Crate to publish (default: all workspace crates)
+        #[arg(long)]
+        crate_name: Option<String>,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -154,6 +160,7 @@ fn run_command(cli: Cli) -> Result<String, String> {
     match cli.command {
         Commands::Prdoc { cmd } => run_prdoc(cmd),
         Commands::Changelog { cmd } => run_changelog(cmd),
+        Commands::Publish { crate_name } => cmd_publish(crate_name.as_deref()),
     }
 }
 
@@ -503,4 +510,77 @@ fn cmd_changelog_verify(from: Option<&str>) -> Result<String, String> {
             prdocs.len(),
         ))
     }
+}
+
+fn cmd_publish(crate_name: Option<&str>) -> Result<String, String> {
+    // Detect version from workspace Cargo.toml
+    let root = std::env::current_dir().map_err(|e| format!("{e}"))?;
+    let cargo_toml = root.join("Cargo.toml");
+    let content =
+        std::fs::read_to_string(&cargo_toml).map_err(|e| format!("{e}"))?;
+    let version_line = content
+        .lines()
+        .find(|l| l.trim().starts_with("version ="))
+        .ok_or("could not find version in Cargo.toml")?;
+    let version = version_line
+        .split('=')
+        .nth(1)
+        .ok_or("invalid version line")?
+        .trim()
+        .trim_matches('"')
+        .to_string();
+    let major_minor = version
+        .rsplitn(2, '.')
+        .last()
+        .unwrap_or(&version)
+        .to_string();
+
+    let crates = if let Some(name) = crate_name {
+        vec![name.to_string()]
+    } else {
+        vec![
+            "changelogger-prdoc".to_string(),
+            "changelogger-cli".to_string(),
+        ]
+    };
+
+    for crate_name in &crates {
+        println!("Publishing {crate_name} v{version}...");
+
+        if *crate_name == "changelogger-cli" {
+            let cli_toml = root.join("packages").join("cli").join("Cargo.toml");
+            let content = std::fs::read_to_string(&cli_toml)
+                .map_err(|e| format!("{e}"))?;
+            let patched = content.replace(
+                "changelogger-prdoc = { path = \"../prdoc\" }",
+                &format!("changelogger-prdoc = \"{major_minor}\""),
+            );
+            std::fs::write(&cli_toml, &patched).map_err(|e| format!("{e}"))?;
+        }
+
+        let status = std::process::Command::new("cargo")
+            .args(["publish", "-p", crate_name, "--allow-dirty"])
+            .status()
+            .map_err(|e| format!("failed to run cargo publish: {e}"))?;
+
+        if !status.success() {
+            return Err(format!("publish failed for {crate_name}"));
+        }
+
+        // Restore path dep for cli
+        if *crate_name == "changelogger-cli" {
+            let cli_toml = root.join("packages").join("cli").join("Cargo.toml");
+            let content = std::fs::read_to_string(&cli_toml)
+                .map_err(|e| format!("{e}"))?;
+            let patched = content.replace(
+                &format!("changelogger-prdoc = \"{major_minor}\""),
+                "changelogger-prdoc = { path = \"../prdoc\" }",
+            );
+            std::fs::write(&cli_toml, &patched).map_err(|e| format!("{e}"))?;
+        }
+
+        println!("Published {crate_name} v{version}");
+    }
+
+    Ok("All crates published successfully.".to_string())
 }
