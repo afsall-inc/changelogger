@@ -1,0 +1,17 @@
+---
+title: "feat: auto-changelog, auto-tag, and release notes"
+author: balqaasem
+pr: 12
+
+doc:
+  - audience: Developer
+    description: |
+      Closes #11
+      
+      - cd.yml: on version bump, auto-generate CHANGELOG.md from prdocs, commit it, and tag with v<version>
+      - release.yml: use CHANGELOG.md as release notes if available
+
+crates:
+  - name: changelogger-prdoc
+    bump: minor
+---
