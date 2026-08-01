@@ -79,18 +79,18 @@ jobs:
           echo "generated=true" >> "$GITHUB_OUTPUT"
         fi
 
-    - name: Validate PRDoc
+    - name: Validate and auto-fix PRDoc
       env:
         CI: "true"
       run: |
         PRDOC="prdoc/pr_${{ github.event.pull_request.number }}.prdoc"
-        cargo run --package changelogger-cli -- prdoc validate "$PRDOC"
+        cargo run --package changelogger-cli -- prdoc validate --fix "$PRDOC"
 
     - name: Validate Backport Rules
       if: startsWith(github.base_ref, 'stable') || startsWith(github.base_ref, 'release')
       run: |
         PRDOC="prdoc/pr_${{ github.event.pull_request.number }}.prdoc"
-        cargo run --package changelogger-cli -- prdoc validate --branch "${{ github.base_ref }}" "$PRDOC"
+        cargo run --package changelogger-cli -- prdoc validate --fix --branch "${{ github.base_ref }}" "$PRDOC"
 
     - name: Commit PRDoc
       if: steps.generate.outputs.generated == 'true'

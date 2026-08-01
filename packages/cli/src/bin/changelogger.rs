@@ -80,6 +80,9 @@ enum PrdocCmd {
         /// Branch name for backport validation
         #[arg(long)]
         branch: Option<String>,
+        /// Auto-fix common issues (empty/missing crates, placeholder descriptions)
+        #[arg(long)]
+        fix: bool,
     },
     /// Auto-generate a prdoc skeleton
     Generate {
@@ -161,9 +164,11 @@ fn run_prdoc(cmd: PrdocCmd) -> Result<String, String> {
     match cmd {
         PrdocCmd::Init => cmd_init(),
         PrdocCmd::Show { path } => cmd_show(&path),
-        PrdocCmd::Validate { path, branch } => {
-            cmd_validate(&path, branch.as_deref())
-        }
+        PrdocCmd::Validate {
+            path,
+            branch,
+            fix,
+        } => cmd_validate(&path, branch.as_deref(), fix),
         PrdocCmd::Generate {
             pr,
             from,
@@ -237,11 +242,12 @@ fn cmd_show(path: &str) -> Result<String, String> {
     serde_json::to_string_pretty(&prdoc).map_err(|e| e.to_string())
 }
 
-fn cmd_validate(path: &str, branch: Option<&str>) -> Result<String, String> {
+fn cmd_validate(path: &str, branch: Option<&str>, fix: bool) -> Result<String, String> {
     let path = PathBuf::from(path);
 
     if path.is_dir() {
         let mut all_issues = Vec::new();
+        let mut all_fixes = Vec::new();
         let mut count = 0usize;
         let entries = changelogger_prdoc::walk_dir(&path).unwrap_or_default();
         for entry in entries {
@@ -249,18 +255,30 @@ fn cmd_validate(path: &str, branch: Option<&str>) -> Result<String, String> {
                 continue;
             }
             count += 1;
-            let prdoc = match changelogger_prdoc::load_prdoc(&entry) {
-                Ok(p) => p,
-                Err(e) => {
-                    all_issues.push(format!("{}: {}", entry.display(), e));
-                    continue;
+            let prdoc = if fix {
+                match changelogger_prdoc::load_and_fix_prdoc(&entry) {
+                    Ok((p, fixes)) => {
+                        for f in &fixes {
+                            all_fixes.push(format!("{}: {}", entry.display(), f));
+                        }
+                        p
+                    }
+                    Err(e) => {
+                        all_issues.push(format!("{}: {}", entry.display(), e));
+                        continue;
+                    }
+                }
+            } else {
+                match changelogger_prdoc::load_prdoc(&entry) {
+                    Ok(p) => p,
+                    Err(e) => {
+                        all_issues.push(format!("{}: {}", entry.display(), e));
+                        continue;
+                    }
                 }
             };
             let issues = if let Some(branch_name) = branch {
-                changelogger_prdoc::validate_prdoc_for_branch(
-                    &prdoc,
-                    branch_name,
-                )
+                changelogger_prdoc::validate_prdoc_for_branch(&prdoc, branch_name)
             } else {
                 changelogger_prdoc::validate_prdoc(&prdoc)
             };
@@ -268,18 +286,24 @@ fn cmd_validate(path: &str, branch: Option<&str>) -> Result<String, String> {
                 all_issues.push(format!(
                     "{}:\n{}",
                     entry.display(),
-                    issues
-                        .iter()
-                        .map(|i| format!("  - {i}"))
-                        .collect::<Vec<_>>()
-                        .join("\n")
+                    issues.iter().map(|i| format!("  - {i}")).collect::<Vec<_>>().join("\n")
                 ));
             }
         }
+        let mut out = String::new();
+        if !all_fixes.is_empty() {
+            out.push_str(&format!("Fixed {} issue(s):\n", all_fixes.len()));
+            for f in &all_fixes {
+                out.push_str(&format!("  - {f}\n"));
+            }
+            out.push('\n');
+        }
         if all_issues.is_empty() {
-            Ok(format!("Validated {count} prdoc file(s)."))
+            out.push_str(&format!("Validated {count} prdoc file(s)."));
+            Ok(out)
         } else {
-            Err(all_issues.join("\n"))
+            out.push_str(&all_issues.join("\n"));
+            Err(out)
         }
     } else {
         if !path.exists() {
@@ -291,8 +315,19 @@ fn cmd_validate(path: &str, branch: Option<&str>) -> Result<String, String> {
             }
             return Ok("No prdoc found. Validation skipped.".to_string());
         }
-        let prdoc =
-            changelogger_prdoc::load_prdoc(&path).map_err(|e| e.to_string())?;
+        let prdoc = if fix {
+            match changelogger_prdoc::load_and_fix_prdoc(&path) {
+                Ok((p, fixes)) => {
+                    if !fixes.is_empty() {
+                        println!("Fixed: {}", fixes.join(", "));
+                    }
+                    p
+                }
+                Err(e) => return Err(e.to_string()),
+            }
+        } else {
+            changelogger_prdoc::load_prdoc(&path).map_err(|e| e.to_string())?
+        };
         let issues = if let Some(branch_name) = branch {
             changelogger_prdoc::validate_prdoc_for_branch(&prdoc, branch_name)
         } else {
