@@ -140,7 +140,29 @@ impl Changelog {
         out.push('\n');
 
         let refs: Vec<&ChangelogEntry> = self.entries.iter().collect();
-        write_version_section(&mut out, version, &refs);
+        let by_category = group_by_category(&refs);
+        for (cat, cat_entries) in &by_category {
+            out.push_str(&format!("### {}\n\n", cat.as_str()));
+            for entry in cat_entries {
+                let pr_str =
+                    entry.pr.map(|p| format!(" (#{})", p)).unwrap_or_default();
+                let crate_strs: Vec<String> = entry
+                    .crates
+                    .iter()
+                    .map(|c| format!("{}({})", c.name, c.bump.as_str()))
+                    .collect();
+                let crates_info = if crate_strs.is_empty() {
+                    String::new()
+                } else {
+                    format!(" [{}]", crate_strs.join(", "))
+                };
+                out.push_str(&format!(
+                    "- {}{}{}\n",
+                    entry.title, crates_info, pr_str
+                ));
+            }
+            out.push('\n');
+        }
 
         out
     }
