@@ -606,11 +606,23 @@ fn cmd_publish(crate_name: Option<&str>) -> Result<String, String> {
             if ws_crate.name == crate_info.name {
                 continue;
             }
-            let path_line =
-                format!("{} = {{ path = \"../{}", ws_crate.name, ws_crate.name);
-            let ver_line = format!("{} = \"{major_minor}\"", ws_crate.name);
-            if patched.contains(&path_line) {
-                patched = patched.replace(&path_line, &ver_line);
+            // Swap `name = { path = "../dir" }` → `name = "major.minor"`
+            let path_dep = format!("{} = {{ path = \"", ws_crate.name);
+            let ver_dep = format!("{} = \"{}\"", ws_crate.name, major_minor);
+            if patched.contains(&path_dep) {
+                // Find the start and end of the path dep line, replace it
+                let mut result = String::new();
+                for line in patched.lines() {
+                    if line.trim().starts_with(&path_dep) {
+                        result.push_str(&ver_dep);
+                        result.push('\n');
+                    } else {
+                        result.push_str(line);
+                        result.push('\n');
+                    }
+                }
+                patched = result;
+                break;
             }
         }
 

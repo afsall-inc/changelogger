@@ -1,0 +1,14 @@
+---
+title: "fix: path dep swap with line-by-line matching, skip already-published"
+author: balqaasem
+pr: 16
+
+doc:
+  - audience: Developer
+    description: |
+      Changes for PR #16
+
+crates:
+  - name: changelogger-cli
+    bump: minor
+---
