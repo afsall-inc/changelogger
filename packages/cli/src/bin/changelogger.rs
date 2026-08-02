@@ -606,18 +606,23 @@ fn cmd_publish(crate_name: Option<&str>) -> Result<String, String> {
             if ws_crate.name == crate_info.name {
                 continue;
             }
-            // Find the exact path dep line and replace it with a version dep
+            // Swap `name = { path = "../dir" }` → `name = "major.minor"`
             let path_dep = format!("{} = {{ path = \"", ws_crate.name);
+            let ver_dep = format!("{} = \"{}\"", ws_crate.name, major_minor);
             if patched.contains(&path_dep) {
-                let mut new_lines = Vec::new();
+                // Find the start and end of the path dep line, replace it
+                let mut result = String::new();
                 for line in patched.lines() {
                     if line.trim().starts_with(&path_dep) {
-                        new_lines.push(format!("{} = \"{}\"", ws_crate.name, major_minor));
+                        result.push_str(&ver_dep);
+                        result.push('\n');
                     } else {
-                        new_lines.push(line.to_string());
+                        result.push_str(line);
+                        result.push('\n');
                     }
                 }
-                patched = new_lines.join("\n") + "\n";
+                patched = result;
+                break;
             }
         }
 
