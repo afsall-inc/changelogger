@@ -125,33 +125,22 @@ impl Changelog {
 
         let grouped = self.group_by_version();
         for (version, entries) in &grouped {
-            out.push_str(&format!("## [{}]\n\n", version));
-            let by_category = group_by_category(entries);
-            for (cat, cat_entries) in &by_category {
-                out.push_str(&format!("### {}\n\n", cat.as_str()));
-                for entry in cat_entries {
-                    let pr_str = entry
-                        .pr
-                        .map(|p| format!(" (#{})", p))
-                        .unwrap_or_default();
-                    let crate_strs: Vec<String> = entry
-                        .crates
-                        .iter()
-                        .map(|c| format!("{}({})", c.name, c.bump.as_str()))
-                        .collect();
-                    let crates_info = if crate_strs.is_empty() {
-                        String::new()
-                    } else {
-                        format!(" [{}]", crate_strs.join(", "))
-                    };
-                    out.push_str(&format!(
-                        "- {}{}{}\n",
-                        entry.title, crates_info, pr_str
-                    ));
-                }
-                out.push('\n');
-            }
+            write_version_section(&mut out, version, entries);
         }
+
+        out
+    }
+
+    pub fn render_release(&self, version: &str) -> String {
+        let mut out = String::new();
+        let date = chrono::Utc::now().format("%Y-%m-%d").to_string();
+        let heading = format!("## [{version}] - {date}");
+        out.push_str(&heading);
+        out.push('\n');
+        out.push('\n');
+
+        let refs: Vec<&ChangelogEntry> = self.entries.iter().collect();
+        write_version_section(&mut out, version, &refs);
 
         out
     }
@@ -237,6 +226,37 @@ impl Changelog {
         TEMPLATES
             .render("summary.md.tera", &context)
             .unwrap_or_else(|e| format!("Template error: {e}"))
+    }
+}
+
+fn write_version_section(
+    out: &mut String,
+    version: &str,
+    entries: &[&ChangelogEntry],
+) {
+    out.push_str(&format!("## [{version}]\n\n"));
+    let by_category = group_by_category(entries);
+    for (cat, cat_entries) in &by_category {
+        out.push_str(&format!("### {}\n\n", cat.as_str()));
+        for entry in cat_entries {
+            let pr_str =
+                entry.pr.map(|p| format!(" (#{})", p)).unwrap_or_default();
+            let crate_strs: Vec<String> = entry
+                .crates
+                .iter()
+                .map(|c| format!("{}({})", c.name, c.bump.as_str()))
+                .collect();
+            let crates_info = if crate_strs.is_empty() {
+                String::new()
+            } else {
+                format!(" [{}]", crate_strs.join(", "))
+            };
+            out.push_str(&format!(
+                "- {}{}{}\n",
+                entry.title, crates_info, pr_str
+            ));
+        }
+        out.push('\n');
     }
 }
 
