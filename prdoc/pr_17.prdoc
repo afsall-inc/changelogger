@@ -1,0 +1,16 @@
+---
+title: Cicd autogen and glossary doc
+author: balqaasem
+pr: 17
+
+doc:
+  - audience: Developer
+    description: |
+      Changes for PR #17
+
+crates:
+  - name: changelogger-cli
+    bump: minor
+  - name: changelogger-prdoc
+    bump: minor
+---
