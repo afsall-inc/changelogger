@@ -128,6 +128,10 @@ enum ChangelogCmd {
         /// Directory with prdoc files instead of git range
         #[arg(long)]
         dir: Option<String>,
+        /// Release version (e.g. 0.2.0). Writes a versioned section into the
+        /// existing changelog instead of overwriting with only [Unreleased]
+        #[arg(long)]
+        release: Option<String>,
     },
     /// Compute version bumps from prdocs
     Bump {
@@ -203,9 +207,17 @@ fn run_prdoc(cmd: PrdocCmd) -> Result<String, String> {
 
 fn run_changelog(cmd: ChangelogCmd) -> Result<String, String> {
     match cmd {
-        ChangelogCmd::Generate { from, output, dir } => {
-            cmd_changelog_generate(from.as_deref(), &output, dir.as_deref())
-        }
+        ChangelogCmd::Generate {
+            from,
+            output,
+            dir,
+            release,
+        } => cmd_changelog_generate(
+            from.as_deref(),
+            &output,
+            dir.as_deref(),
+            release.as_deref(),
+        ),
         ChangelogCmd::Bump {
             current,
             from,
@@ -464,6 +476,7 @@ fn cmd_changelog_generate(
     from: Option<&str>,
     output: &str,
     dir: Option<&str>,
+    release: Option<&str>,
 ) -> Result<String, String> {
     let prdocs = if let Some(dir_path) = dir {
         let path = PathBuf::from(dir_path);
@@ -494,8 +507,49 @@ fn cmd_changelog_generate(
         changelog.add_prdoc(p);
     }
 
-    let rendered = changelog.render();
-    std::fs::write(output, &rendered).map_err(|e| e.to_string())?;
+    if let Some(version) = release {
+        let release_section = changelog.render_release(version);
+        let path = std::path::Path::new(output);
+
+        let existing = if path.exists() {
+            let content =
+                std::fs::read_to_string(path).map_err(|e| e.to_string())?;
+            // Strip the header lines (everything before ## [Unreleased])
+            // so we can keep the header intact and insert the release
+            content
+        } else {
+            String::new()
+        };
+
+        let rendered = if existing.is_empty() {
+            format!(
+                "# Changelog\n\n\
+                 All notable changes to this project will be documented in this \
+                 file.\n\n\
+                 The format is based on [Keep a Changelog]\
+                 (https://keepachangelog.com/),\n\
+                 and this project adheres to [Semantic Versioning]\
+                 (https://semver.org/).\n\n\
+                 {release_section}"
+            )
+        } else {
+            // Insert the release section right after the header, before
+            // [Unreleased]
+            let unreleased_marker = "## [Unreleased]";
+            if let Some(pos) = existing.find(unreleased_marker) {
+                let before = &existing[..pos];
+                let after = &existing[pos..];
+                format!("{before}{release_section}\n{after}")
+            } else {
+                format!("{existing}\n{release_section}")
+            }
+        };
+
+        std::fs::write(output, &rendered).map_err(|e| e.to_string())?;
+    } else {
+        let rendered = changelog.render();
+        std::fs::write(output, &rendered).map_err(|e| e.to_string())?;
+    }
 
     let source = dir
         .map(|d| d.to_string())
@@ -816,7 +870,7 @@ jobs:
       - name: Install changelogger
         run: cargo install changelogger-cli
       - name: Generate CHANGELOG
-        run: changelogger changelog generate --dir prdoc --output CHANGELOG.md
+        run: changelogger changelog generate --dir prdoc --output CHANGELOG.md --release "${{ needs.detect.outputs.version }}"
       - name: Commit and tag
         run: |
           VERSION=${{ needs.detect.outputs.version }}
